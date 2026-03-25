@@ -1,0 +1,160 @@
+# Level 3: Hard benchmark cases — tests reasoning, not just JSON output
+#
+# These cases require the plan engine to demonstrate:
+# - Understanding of ambiguous requirements
+# - Scope discipline (don't add unrequested work)
+# - Logical step ordering and dependencies
+# - Appropriate criterion selection
+# - Recognition of contradictions or impossible requests
+#
+# Scored by Claude judge on 5 dimensions (max 15 points)
+
+# ═══════════════════════════════════════════════════════════════
+# AMBIGUOUS REQUIREMENTS — model must infer or clarify
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: ambig_no_language
+  category: ambiguous
+  description: Request doesn't specify programming language
+  request: "Create a function called calculate_tax that takes income and tax_rate and returns the tax amount"
+  min_quality_score: 8
+  notes: "Good plan should assume Python (RIVA context) or ask. Bad plan picks random language."
+
+- case_id: ambig_vague_refactor
+  category: ambiguous
+  description: Refactor request without specifying what's wrong
+  request: "Refactor the authentication module to be better"
+  min_quality_score: 6
+  notes: "Good plan should identify specific improvements. Bad plan has vague steps like 'make it better'."
+
+- case_id: ambig_multiple_interpretations
+  category: ambiguous
+  description: Request that could mean different things
+  request: "Add logging to the application"
+  min_quality_score: 7
+  notes: "Good plan should define scope (which files, what level, what format). Bad plan is too broad or too narrow."
+
+# ═══════════════════════════════════════════════════════════════
+# SCOPE DISCIPLINE — don't add unrequested work
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: scope_just_one_function
+  category: scope
+  description: Only one function requested — plan should not add extras
+  request: "Add a validate_email function to utils.py that checks if a string is a valid email address"
+  min_quality_score: 9
+  notes: "Good plan has 1-2 steps. Bad plan adds error handling module, test suite, CI pipeline, documentation."
+
+- case_id: scope_fix_not_rewrite
+  category: scope
+  description: Bug fix — should not become a rewrite
+  request: "Fix the off-by-one error in the pagination function in api/routes.py line 42"
+  min_quality_score: 9
+  notes: "Good plan fixes the specific line. Bad plan refactors the entire pagination module."
+
+- case_id: scope_read_only
+  category: scope
+  description: Request is for information, not code changes
+  request: "Explain how the database connection pool works in our application"
+  min_quality_score: 6
+  notes: "Good plan recognizes this isn't a code change. Bad plan creates files or modifies code."
+
+# ═══════════════════════════════════════════════════════════════
+# CONTRADICTORY / IMPOSSIBLE — model should flag problems
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: contradict_two_things
+  category: contradictory
+  description: Contradictory requirements in same request
+  request: "Create a function that is both synchronous and asynchronous, takes no arguments but processes a list of items"
+  min_quality_score: 5
+  notes: "Good plan flags the contradiction. Bad plan ignores it and picks one interpretation silently."
+
+- case_id: contradict_delete_and_keep
+  category: contradictory
+  description: Asked to delete something and keep it
+  request: "Remove the old authentication module but make sure all existing auth tests still pass against it"
+  min_quality_score: 6
+  notes: "Good plan identifies the tension and proposes a migration path. Bad plan just deletes."
+
+- case_id: impossible_no_context
+  category: contradictory
+  description: References files that don't exist
+  request: "Update the GraphQL schema in schema.graphql to add a new User type with fields from the existing REST API in api/v2/users.py"
+  min_quality_score: 5
+  notes: "Good plan acknowledges missing context. Bad plan assumes file contents."
+
+# ═══════════════════════════════════════════════════════════════
+# MULTI-STEP DEPENDENCIES — ordering matters
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: deps_schema_then_code
+  category: dependencies
+  description: Database schema must come before code that uses it
+  request: "Add a comments feature: create the database migration, the Comment model, the API endpoints, and the tests"
+  min_quality_score: 8
+  notes: "Good plan orders: migration → model → endpoints → tests. Bad plan has tests before model."
+
+- case_id: deps_interface_then_impl
+  category: dependencies
+  description: Interface must be defined before implementations
+  request: "Create a plugin system with a base Plugin class, three concrete plugins (Logger, Metrics, Auth), and a plugin registry"
+  min_quality_score: 8
+  notes: "Good plan creates base class first, then implementations, then registry. Order matters."
+
+- case_id: deps_config_then_use
+  category: dependencies
+  description: Configuration must exist before it's consumed
+  request: "Set up environment-based configuration for the app: create a config module, update the database connection to use it, and update the API server to use it"
+  min_quality_score: 8
+  notes: "Config module must come first. Consumers depend on it."
+
+# ═══════════════════════════════════════════════════════════════
+# COMPLEX REAL-WORLD — multi-file, multi-concern
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: real_rest_endpoint
+  category: complex
+  description: Full REST endpoint with validation, storage, and tests
+  request: "Add a POST /api/users endpoint that validates email and password, hashes the password with bcrypt, stores in SQLite, and returns the user object. Include tests."
+  min_quality_score: 9
+  notes: "Good plan covers validation, hashing, storage, response format, error cases, AND tests."
+
+- case_id: real_cli_tool
+  category: complex
+  description: CLI tool with argument parsing and output formatting
+  request: "Create a CLI tool called 'taskctl' that can list, add, complete, and delete tasks from a SQLite database. Use argparse for argument parsing."
+  min_quality_score: 8
+  notes: "Good plan creates: DB schema, CRUD functions, CLI parser, subcommands, output formatting."
+
+- case_id: real_data_pipeline
+  category: complex
+  description: Multi-stage data processing
+  request: "Build a data pipeline that reads CSV files from an input directory, validates each row against a schema, transforms valid rows, and writes results to a new CSV. Log invalid rows to an error file."
+  min_quality_score: 8
+  notes: "Good plan identifies: reader, validator, transformer, writer, error handler as distinct steps."
+
+# ═══════════════════════════════════════════════════════════════
+# CRITERION QUALITY — does the model pick good criteria?
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: crit_should_be_automatable
+  category: criteria
+  description: Simple task where all criteria should be machine-checkable
+  request: "Create two Python files: math_utils.py with add, subtract, multiply functions, and test_math.py with pytest tests for each function"
+  min_quality_score: 10
+  notes: "All criteria should be file_exists or function_defined. Manual verification = quality failure."
+
+- case_id: crit_needs_manual
+  category: criteria
+  description: Task where some criteria legitimately require manual review
+  request: "Improve the error messages in the API to be more user-friendly and consistent in tone"
+  min_quality_score: 7
+  notes: "Tone and user-friendliness genuinely require human judgment. Good plan uses manual criteria here."
+
+- case_id: crit_mixed
+  category: criteria
+  description: Task with both automatable and non-automatable aspects
+  request: "Create a login page with a form that has email and password fields, proper validation, and matches the existing app style"
+  min_quality_score: 7
+  notes: "File existence is automatable. 'Matches existing style' is legitimately manual."

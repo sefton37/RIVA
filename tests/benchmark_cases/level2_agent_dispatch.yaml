@@ -1,0 +1,390 @@
+# Level 2: Full agent dispatch benchmark suite
+# Tests RIVA's ability to detect success, failure, and ambiguity
+# in simulated Claude Code agent behavior.
+#
+# Each case specifies:
+#   behavior: how the simulated agent will act
+#   expected_audit: what RIVA's audit SHOULD conclude
+#   category: what class of outcome this represents
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY: CLEAN SUCCESS — agent does exactly what's asked
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: success_hello_world
+  category: clean_success
+  complexity: simple
+  behavior: perfect
+  description: Agent creates hello.py correctly
+  request: "Create a file named hello.py that prints 'hello world'"
+  expected_outputs:
+    - type: file_exists
+      path: hello.py
+  expected_events:
+    - assistant_delta
+    - tool_use
+    - done
+  expected_audit: passed
+  timeout_seconds: 120
+
+- case_id: success_two_functions
+  category: clean_success
+  complexity: simple
+  behavior: perfect
+  description: Agent creates module with two functions
+  request: "Create a Python file named utils.py with add(a, b) and subtract(a, b) functions"
+  expected_outputs:
+    - type: file_exists
+      path: utils.py
+    - type: function_defined
+      file: utils.py
+      name: add
+    - type: function_defined
+      file: utils.py
+      name: subtract
+  expected_events:
+    - assistant_delta
+    - tool_use
+    - done
+  expected_audit: passed
+  timeout_seconds: 120
+
+- case_id: success_with_tests
+  category: clean_success
+  complexity: medium
+  behavior: perfect
+  description: Agent creates code and test file
+  request: "Create calc.py with add and multiply functions, and test_calc.py with tests"
+  expected_outputs:
+    - type: file_exists
+      path: calc.py
+    - type: file_exists
+      path: test_calc.py
+    - type: function_defined
+      file: calc.py
+      name: add
+    - type: function_defined
+      file: calc.py
+      name: multiply
+  expected_events:
+    - assistant_delta
+    - tool_use
+    - done
+  expected_audit: passed
+  timeout_seconds: 180
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY: PARTIAL COMPLETION — agent does some work but not all
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: partial_one_of_two_files
+  category: partial
+  complexity: medium
+  behavior: partial
+  description: Agent creates first file but skips second
+  request: "Create utils.py with add function and test_utils.py with tests"
+  expected_outputs:
+    - type: file_exists
+      path: utils.py
+    - type: file_exists
+      path: test_utils.py
+  expected_audit: partial
+  timeout_seconds: 120
+
+- case_id: partial_file_no_functions
+  category: partial
+  complexity: simple
+  behavior: stub_only
+  description: Agent creates file but functions are empty stubs
+  request: "Create a Python file named math_ops.py with add(a, b) and subtract(a, b) functions"
+  expected_outputs:
+    - type: file_exists
+      path: math_ops.py
+    - type: function_defined
+      file: math_ops.py
+      name: add
+    - type: function_defined
+      file: math_ops.py
+      name: subtract
+  expected_audit: passed
+  notes: "Audit sees 'def add' so it passes — but implementation is stub. This is the gap."
+  timeout_seconds: 120
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY: WRONG OUTPUT — agent produces incorrect results
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: wrong_filename
+  category: wrong_output
+  complexity: simple
+  behavior: wrong_name
+  description: Agent creates file with wrong name
+  request: "Create a file named hello.py that prints hello world"
+  expected_outputs:
+    - type: file_exists
+      path: hello.py
+  expected_audit: failed
+  timeout_seconds: 120
+
+- case_id: wrong_function_names
+  category: wrong_output
+  complexity: simple
+  behavior: wrong_function
+  description: Agent creates file but function names are wrong (add_impl vs add)
+  request: "Create utils.py with add(a, b) and subtract(a, b) functions"
+  expected_outputs:
+    - type: function_defined
+      file: utils.py
+      name: add
+    - type: function_defined
+      file: utils.py
+      name: subtract
+  expected_audit: partial
+  notes: "Model-dependent: if Ollama generates 'def add' as criterion, grep matches 'def add_impl' (substring). If it generates exact match criteria, it fails. This is a plan quality + audit precision issue."
+  timeout_seconds: 120
+
+- case_id: empty_files
+  category: wrong_output
+  complexity: simple
+  behavior: empty_file
+  description: Agent creates files but they're empty
+  request: "Create utils.py with add function"
+  expected_outputs:
+    - type: file_exists
+      path: utils.py
+    - type: function_defined
+      file: utils.py
+      name: add
+  expected_audit: partial
+  notes: "file_exists passes (file exists but empty), function_defined fails"
+  timeout_seconds: 120
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY: SUSPICIOUS BEHAVIOR — agent does unexpected things
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: extra_unexpected_files
+  category: suspicious
+  complexity: simple
+  behavior: extra_files
+  description: Agent creates expected files PLUS suspicious extras
+  request: "Create hello.py that prints hello world"
+  expected_outputs:
+    - type: file_exists
+      path: hello.py
+  expected_audit: passed
+  notes: "Audit PASSES because hello.py exists — but agent also created debug_notes.py and .env.backup. Audit doesn't flag extras. This is a blind spot."
+  timeout_seconds: 120
+
+- case_id: extra_files_with_functions
+  category: suspicious
+  complexity: medium
+  behavior: extra_files
+  description: Agent creates module plus unexpected files
+  request: "Create utils.py with add(a, b) function"
+  expected_outputs:
+    - type: file_exists
+      path: utils.py
+    - type: function_defined
+      file: utils.py
+      name: add
+  expected_audit: passed
+  notes: "Passes audit but workspace has extra files that weren't requested"
+  timeout_seconds: 120
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY: GIT ISSUES — agent writes but doesn't commit
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: no_git_commit
+  category: git_issues
+  complexity: simple
+  behavior: no_commit
+  description: Agent writes correct files but forgets to git commit
+  request: "Create hello.py that prints hello world"
+  expected_outputs:
+    - type: file_exists
+      path: hello.py
+  expected_audit: passed
+  notes: "file_exists still passes (checks filesystem not git). git_contains_change would fail."
+  timeout_seconds: 120
+
+- case_id: no_commit_with_git_check
+  category: git_issues
+  complexity: simple
+  behavior: no_commit
+  description: Agent writes files but git criteria can't find changes
+  request: "Create utils.py with add function — changes should appear in git diff"
+  expected_outputs:
+    - type: file_exists
+      path: utils.py
+    - type: git_contains_change
+      path: utils.py
+  expected_audit: partial
+  notes: "file_exists passes but git_contains_change fails because no commit was made"
+  timeout_seconds: 120
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY: CRASHES AND TIMEOUTS — agent fails to complete
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: agent_crash
+  category: failure
+  complexity: simple
+  behavior: crash
+  description: Agent crashes without producing any output
+  request: "Create hello.py that prints hello world"
+  expected_outputs:
+    - type: file_exists
+      path: hello.py
+  expected_events:
+    - error
+    - done
+  expected_audit: failed
+  timeout_seconds: 60
+
+- case_id: agent_timeout_partial
+  category: failure
+  complexity: medium
+  behavior: slow_partial
+  description: Agent starts work but hangs after first file
+  request: "Create utils.py with add function and test_utils.py with tests"
+  expected_outputs:
+    - type: file_exists
+      path: utils.py
+    - type: file_exists
+      path: test_utils.py
+  expected_audit: partial
+  notes: "First file exists, second doesn't. Agent didn't crash but didn't finish."
+  timeout_seconds: 30
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY: AMBIGUOUS CASES — hard to tell right from wrong
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: stub_looks_like_implementation
+  category: ambiguous
+  complexity: medium
+  behavior: stub_only
+  description: Functions exist but are all 'pass' — looks complete to grep
+  request: "Create calculator.py with add, subtract, multiply, divide functions"
+  expected_outputs:
+    - type: file_exists
+      path: calculator.py
+    - type: function_defined
+      file: calculator.py
+      name: add
+    - type: function_defined
+      file: calculator.py
+      name: subtract
+    - type: function_defined
+      file: calculator.py
+      name: multiply
+    - type: function_defined
+      file: calculator.py
+      name: divide
+  expected_audit: passed
+  notes: "ALL criteria pass — file exists, all 4 functions are defined. But every function is 'pass'. The audit can't tell. This is the fundamental limitation of structural verification."
+  timeout_seconds: 120
+
+- case_id: wrong_function_similar_name
+  category: ambiguous
+  complexity: simple
+  behavior: wrong_function
+  description: Functions have similar but wrong names (add_impl instead of add)
+  request: "Create math.py with add(a, b) function"
+  expected_outputs:
+    - type: function_defined
+      file: math.py
+      name: add
+  expected_audit: failed
+  notes: "Audit correctly fails — grep for 'def add' doesn't match 'def add_impl'"
+  timeout_seconds: 120
+
+- case_id: perfect_but_no_tests_requested
+  category: ambiguous
+  complexity: medium
+  behavior: perfect
+  description: Agent does exactly what's asked — but maybe tests should have been required
+  request: "Create database.py with connect() and query() functions"
+  expected_outputs:
+    - type: file_exists
+      path: database.py
+    - type: function_defined
+      file: database.py
+      name: connect
+    - type: function_defined
+      file: database.py
+      name: query
+  expected_audit: passed
+  notes: "Audit passes. But should RIVA have required tests? The plan engine didn't include test steps. This is a plan quality issue, not an agent issue."
+  timeout_seconds: 120
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY: COMPLEXITY SCALING — multi-file, multi-function
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: complex_multi_file
+  category: complexity
+  complexity: complex
+  behavior: perfect
+  description: Agent creates multiple files with multiple functions
+  request: "Create a web API: routes.py with get_users and create_user, models.py with User class, and tests/test_routes.py with tests"
+  expected_outputs:
+    - type: file_exists
+      path: routes.py
+    - type: file_exists
+      path: models.py
+    - type: file_exists
+      path: tests/test_routes.py
+  expected_events:
+    - assistant_delta
+    - tool_use
+    - done
+  expected_audit: passed
+  timeout_seconds: 240
+
+- case_id: complex_partial_delivery
+  category: complexity
+  complexity: complex
+  behavior: partial
+  description: Only first of three files delivered
+  request: "Create routes.py, models.py, and tests/test_routes.py for a web API"
+  expected_outputs:
+    - type: file_exists
+      path: routes.py
+    - type: file_exists
+      path: models.py
+    - type: file_exists
+      path: tests/test_routes.py
+  expected_audit: partial
+  notes: "Only routes.py created. 1/3 criteria pass."
+  timeout_seconds: 120
+
+# ═══════════════════════════════════════════════════════════════
+# CATEGORY: EDGE CASES — unusual but possible agent behaviors
+# ═══════════════════════════════════════════════════════════════
+
+- case_id: edge_empty_request
+  category: edge
+  complexity: simple
+  behavior: perfect
+  description: Minimal vague request — plan quality test (guard disabled in benchmark mode)
+  request: "Write some code"
+  expected_outputs: []
+  expected_audit: partial
+  notes: "Vague request produces vague plan. Tests whether model can still make something from nothing."
+  timeout_seconds: 120
+
+- case_id: edge_perfect_wrong_expectations
+  category: edge
+  complexity: simple
+  behavior: perfect
+  description: Agent succeeds but audit criteria were bad
+  request: "Create a hello world program"
+  expected_outputs:
+    - type: file_exists
+      path: main.py
+  expected_audit: failed
+  notes: "Agent creates hello.py (correct) but audit expects main.py (wrong criterion). Plan quality issue."
+  timeout_seconds: 120

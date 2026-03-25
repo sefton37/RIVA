@@ -1,0 +1,16 @@
+[Unit]
+Description=RIVA Agent Orchestrator
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/dev/RIVA/.venv/bin/riva-service
+WorkingDirectory=%h/dev/RIVA
+# Ensure claude CLI and nolang are on PATH
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

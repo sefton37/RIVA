@@ -1,0 +1,42 @@
+# Level 1: Plan Engine decomposition test cases
+# Tests Ollama plan quality — no Claude Code needed
+
+- case_id: plan_hello_world
+  category: positive
+  description: Simple single-file creation
+  request: "Create a Python file named hello.py that prints hello world"
+  expected_plan:
+    min_steps: 1
+    max_steps: 5
+    required_criterion_types:
+      - file_exists
+
+- case_id: plan_two_functions
+  category: positive
+  description: Module with two functions
+  request: "Create a Python file named utils.py with add(a, b) and subtract(a, b) functions"
+  expected_plan:
+    min_steps: 1
+    max_steps: 6
+    required_criterion_types:
+      - file_exists
+
+- case_id: plan_test_suite
+  category: positive
+  description: Code with tests
+  request: "Create a calculator module with add, subtract, multiply, divide functions and a test file"
+  expected_plan:
+    min_steps: 2
+    max_steps: 10
+    required_criterion_types:
+      - file_exists
+
+- case_id: plan_refactor
+  category: positive
+  description: Refactoring task requiring git changes
+  request: "Refactor the main function in app.py to extract the database connection into a separate module called db.py"
+  expected_plan:
+    min_steps: 2
+    max_steps: 8
+    required_criterion_types:
+      - file_exists
