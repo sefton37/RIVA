@@ -156,7 +156,6 @@ def handle_issues_create(
     branch: str | None = None,
     acceptance_criteria: str | None = None,
     notes: str | None = None,
-    riva_contract_id: str | None = None,
     **_kw,
 ) -> dict[str, Any]:
     if not name:
@@ -166,7 +165,6 @@ def handle_issues_create(
         epic_id=epic_id, cycle_id=cycle_id, estimate=estimate,
         assignee=assignee, forgejo_link=forgejo_link, branch=branch,
         acceptance_criteria=acceptance_criteria, notes=notes,
-        riva_contract_id=riva_contract_id,
     )
     return issue.to_dict()
 

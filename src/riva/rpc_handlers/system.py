@@ -32,5 +32,5 @@ def handle_status() -> dict[str, Any]:
     return {
         "status": "running",
         "uptime_seconds": round(uptime, 1),
-        "version": "0.1.0",
+        "version": "0.2.0",
     }

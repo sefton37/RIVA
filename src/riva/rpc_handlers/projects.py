@@ -6,12 +6,15 @@ Methods:
     riva/projects/get — Get project details
     riva/projects/update — Update project name/description/act link
     riva/projects/archive — Archive a project
+    riva/projects/scan — Scan a directory for project subfolders
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -75,12 +78,6 @@ def handle_projects_list(
         projects = []
         for row in rows:
             project = dict(row)
-            # Enrich with Act title if linked
-            if project.get("act_id"):
-                from riva.play_integration import get_act_context
-
-                act = get_act_context(project["act_id"])
-                project["act_title"] = act["title"] if act else None
             projects.append(project)
 
         return {"projects": projects}
@@ -102,12 +99,6 @@ def handle_projects_get(*, project_id: str = "", **_kw) -> dict[str, Any]:
             raise RivaError(f"Project not found: {project_id}")
 
         project = dict(row)
-
-        # Enrich with Act context if linked
-        if project.get("act_id"):
-            from riva.play_integration import get_act_context
-
-            project["act_context"] = get_act_context(project["act_id"])
 
         return project
     finally:
@@ -179,3 +170,66 @@ def handle_projects_archive(
 
     logger.info("Project archived: %s", project_id)
     return {"project_id": project_id, "status": "archived"}
+
+
+def handle_projects_scan(
+    *, root: str = "", **_kw
+) -> dict[str, Any]:
+    """Scan a directory for project subfolders.
+
+    Returns metadata about each subfolder: name, path, whether it's
+    a git repo, and language hints based on marker files.
+    """
+    if not root:
+        raise RivaError("root is required")
+
+    root_path = Path(root)
+    if not root_path.is_dir():
+        raise RivaError(f"Not a directory: {root}")
+
+    projects = []
+    try:
+        entries = sorted(root_path.iterdir(), key=lambda p: p.name.lower())
+    except PermissionError:
+        raise RivaError(f"Permission denied: {root}")
+
+    for entry in entries:
+        if not entry.is_dir() or entry.name.startswith('.'):
+            continue
+
+        project: dict[str, Any] = {
+            "name": entry.name,
+            "path": str(entry),
+            "is_git": (entry / ".git").exists(),
+        }
+
+        # Detect language/framework from marker files
+        lang = _detect_language(entry)
+        if lang:
+            project["language"] = lang
+
+        projects.append(project)
+
+    return {"projects": projects, "root": root}
+
+
+def _detect_language(path: Path) -> str | None:
+    """Detect primary language/framework from marker files."""
+    markers = {
+        "pyproject.toml": "Python",
+        "setup.py": "Python",
+        "Cargo.toml": "Rust",
+        "package.json": "Node",
+        "go.mod": "Go",
+        "pom.xml": "Java",
+        "build.gradle": "Java",
+        "Gemfile": "Ruby",
+        "mix.exs": "Elixir",
+        "composer.json": "PHP",
+        "CMakeLists.txt": "C/C++",
+        "Makefile": "Make",
+    }
+    for marker, lang in markers.items():
+        if (path / marker).exists():
+            return lang
+    return None

@@ -45,12 +45,6 @@ class TestPmTablesExist:
         columns = {row[1] for row in cursor.fetchall()}
         assert "act_id" in columns
 
-    def test_pm_issues_has_riva_contract_id(self, conn):
-        cursor = conn.execute("PRAGMA table_info(pm_issues)")
-        columns = {row[1] for row in cursor.fetchall()}
-        assert "riva_contract_id" in columns
-
-
 class TestPmForeignKeys:
 
     def test_issue_epic_fk_enforced(self, conn):
@@ -73,16 +67,6 @@ class TestPmForeignKeys:
                 "'nonexistent', '2026-01-01', '2026-01-01')"
             )
 
-    def test_issue_riva_contract_fk_enforced(self, conn):
-        """Issue with nonexistent riva_contract_id should fail."""
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute(
-                "INSERT INTO pm_issues (id, name, status, priority, type, "
-                "riva_contract_id, created_at, updated_at) "
-                "VALUES ('i1', 'test', 'Backlog', 'Medium', 'Feature', "
-                "'nonexistent', '2026-01-01', '2026-01-01')"
-            )
-
     def test_issue_null_fks_allowed(self, conn):
         """Issues with NULL FKs should insert fine."""
         conn.execute(
@@ -95,7 +79,6 @@ class TestPmForeignKeys:
         assert row is not None
         assert row["epic_id"] is None
         assert row["cycle_id"] is None
-        assert row["riva_contract_id"] is None
 
     def test_research_epic_fk_enforced(self, conn):
         with pytest.raises(sqlite3.IntegrityError):

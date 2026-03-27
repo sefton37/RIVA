@@ -1,7 +1,3 @@
-"""RIVA — Recursive Intent Verification Architecture.
+"""RIVA — Project and product management service."""
 
-Agent orchestrator for project management. Decomposes intent into contracts,
-dispatches Claude Code agents, supervises them live, and audits their output.
-"""
-
-__version__ = "0.1.0"
+__version__ = "0.2.0"

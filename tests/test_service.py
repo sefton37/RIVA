@@ -86,7 +86,7 @@ class TestServiceIntegration:
         """riva/status returns running status over the socket."""
         response = await _send_rpc(riva_service, "riva/status")
         assert response["result"]["status"] == "running"
-        assert response["result"]["version"] == "0.1.0"
+        assert response["result"]["version"] == "0.2.0"
 
     @pytest.mark.asyncio
     async def test_unknown_method(self, riva_service):

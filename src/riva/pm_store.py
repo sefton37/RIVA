@@ -39,7 +39,7 @@ _CYCLE_FIELDS = {
 _ISSUE_FIELDS = {
     "name", "status", "priority", "type", "epic_id", "cycle_id",
     "estimate", "assignee", "forgejo_link", "branch",
-    "acceptance_criteria", "notes", "riva_contract_id",
+    "acceptance_criteria", "notes",
 }
 
 _ROADMAP_FIELDS = {
@@ -305,7 +305,6 @@ def create_issue(
     branch: str | None = None,
     acceptance_criteria: str | None = None,
     notes: str | None = None,
-    riva_contract_id: str | None = None,
 ) -> PmIssue:
     issue_id = f"issue-{uuid4().hex[:12]}"
     now = _now()
@@ -315,11 +314,11 @@ def create_issue(
             "INSERT INTO pm_issues "
             "(id, name, status, priority, type, epic_id, cycle_id, estimate, "
             "assignee, forgejo_link, branch, acceptance_criteria, notes, "
-            "riva_contract_id, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (issue_id, name, status, priority, type, epic_id, cycle_id,
              estimate, assignee, forgejo_link, branch, acceptance_criteria,
-             notes, riva_contract_id, now, now),
+             notes, now, now),
         )
 
     logger.info("Created issue %s: %s", issue_id, name)
@@ -328,7 +327,7 @@ def create_issue(
         type=type, epic_id=epic_id, cycle_id=cycle_id, estimate=estimate,
         assignee=assignee, forgejo_link=forgejo_link, branch=branch,
         acceptance_criteria=acceptance_criteria, notes=notes,
-        riva_contract_id=riva_contract_id, created_at=now, updated_at=now,
+        created_at=now, updated_at=now,
     )
 
 

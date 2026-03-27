@@ -13,29 +13,19 @@ class TestSchema:
     """Tests for ensure_schema()."""
 
     def test_creates_all_tables(self, tmp_path):
-        """All riva_* tables are created."""
+        """All riva_* and pm_* tables are created."""
         db_path = tmp_path / "test.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("PRAGMA journal_mode=WAL")
 
         ensure_schema(conn)
 
-        # Query table names
+        # riva_projects is the only riva_* table now
         cursor = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'riva_%'"
         )
         tables = {row[0] for row in cursor.fetchall()}
-
-        expected = {
-            "riva_projects",
-            "riva_plans",
-            "riva_plan_steps",
-            "riva_contracts",
-            "riva_audits",
-            "riva_agent_properties",
-            "riva_agent_sessions",
-        }
-        assert tables == expected
+        assert tables == {"riva_projects"}
 
         # PM tables
         pm_cursor = conn.execute(
@@ -66,47 +56,32 @@ class TestSchema:
 
         conn.close()
 
-    def test_tables_have_correct_columns(self, tmp_path):
-        """Spot-check that key tables have expected columns."""
+    def test_riva_projects_columns(self, tmp_path):
+        """riva_projects has expected columns."""
         db_path = tmp_path / "test.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("PRAGMA journal_mode=WAL")
         ensure_schema(conn)
 
-        # Check riva_plans columns
-        cursor = conn.execute("PRAGMA table_info(riva_plans)")
+        cursor = conn.execute("PRAGMA table_info(riva_projects)")
         columns = {row[1] for row in cursor.fetchall()}
         assert "id" in columns
-        assert "project_id" in columns
-        assert "title" in columns
-        assert "user_request" in columns
-        assert "status" in columns
-        assert "decomposition_json" in columns
-
-        # Check riva_contracts columns
-        cursor = conn.execute("PRAGMA table_info(riva_contracts)")
-        columns = {row[1] for row in cursor.fetchall()}
-        assert "plan_id" in columns
-        assert "agent_id" in columns
-        assert "verification_criteria_json" in columns
+        assert "name" in columns
+        assert "description" in columns
+        assert "act_id" in columns
         assert "status" in columns
 
         conn.close()
 
-    def test_foreign_keys(self, tmp_path):
-        """Foreign key constraints are present."""
+    def test_pm_issues_no_riva_contract_id(self, tmp_path):
+        """pm_issues no longer has riva_contract_id column."""
         db_path = tmp_path / "test.db"
         conn = sqlite3.connect(str(db_path))
         conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
         ensure_schema(conn)
 
-        # Insert a plan step with a non-existent plan_id should fail
-        with pytest.raises(sqlite3.IntegrityError):
-            conn.execute(
-                "INSERT INTO riva_plan_steps (id, plan_id, step_number, title, "
-                "status, created_at, updated_at) "
-                "VALUES ('s1', 'nonexistent', 1, 'test', 'pending', '2026-01-01', '2026-01-01')"
-            )
+        cursor = conn.execute("PRAGMA table_info(pm_issues)")
+        columns = {row[1] for row in cursor.fetchall()}
+        assert "riva_contract_id" not in columns
 
         conn.close()

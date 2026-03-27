@@ -1,156 +1,12 @@
 """RIVA data models.
 
-Dataclasses for plans, steps, contracts, verification criteria,
-and project management entities.
+Dataclasses for project management entities.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
-
-
-@dataclass
-class PlanStep:
-    """A single step in a RIVA plan."""
-
-    id: str
-    plan_id: str
-    step_number: int
-    title: str
-    description: str = ""
-    acceptance_criterion: str = ""
-    estimated_minutes: int | None = None
-    status: str = "pending"
-    created_at: str = ""
-    updated_at: str = ""
-
-
-@dataclass
-class RivaPlan:
-    """A structured work plan decomposed from a user request."""
-
-    id: str
-    project_id: str
-    title: str
-    user_request: str
-    steps: list[PlanStep] = field(default_factory=list)
-    risks: list[str] = field(default_factory=list)
-    estimated_minutes: int | None = None
-    agent_id: str | None = None
-    status: str = "draft"
-    decomposition_json: str | None = None
-    created_at: str = ""
-    updated_at: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to a JSON-serializable dict for RPC responses."""
-        return {
-            "id": self.id,
-            "project_id": self.project_id,
-            "title": self.title,
-            "user_request": self.user_request,
-            "agent_id": self.agent_id,
-            "status": self.status,
-            "estimated_minutes": self.estimated_minutes,
-            "risks": self.risks,
-            "steps": [
-                {
-                    "id": s.id,
-                    "step_number": s.step_number,
-                    "title": s.title,
-                    "description": s.description,
-                    "acceptance_criterion": s.acceptance_criterion,
-                    "estimated_minutes": s.estimated_minutes,
-                    "status": s.status,
-                }
-                for s in self.steps
-            ],
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-        }
-
-
-@dataclass(frozen=True)
-class VerificationCriterion:
-    """A typed verification criterion derived from a plan step.
-
-    Types:
-        file_exists — path must exist in agent workspace
-        function_defined — function name must be grep-able in file
-        git_contains_change — path must appear in git diff
-        git_commit_message — keyword must appear in git log
-        manual_verification — always inconclusive, flagged for user
-    """
-
-    type: str
-    path: str | None = None
-    file: str | None = None
-    name: str | None = None
-    keyword: str | None = None
-    description: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        d: dict[str, Any] = {"type": self.type}
-        if self.path is not None:
-            d["path"] = self.path
-        if self.file is not None:
-            d["file"] = self.file
-        if self.name is not None:
-            d["name"] = self.name
-        if self.keyword is not None:
-            d["keyword"] = self.keyword
-        if self.description is not None:
-            d["description"] = self.description
-        return d
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> VerificationCriterion:
-        return cls(
-            type=d["type"],
-            path=d.get("path"),
-            file=d.get("file"),
-            name=d.get("name"),
-            keyword=d.get("keyword"),
-            description=d.get("description"),
-        )
-
-
-@dataclass
-class RivaContract:
-    """An enforceable contract created from an approved plan."""
-
-    id: str
-    plan_id: str
-    agent_id: str
-    verification_criteria: list[VerificationCriterion] = field(default_factory=list)
-    nol_assembly: str | None = None
-    nol_intent_hash: str | None = None
-    nol_verified: bool = False
-    approved_at: str = ""
-    approved_by: str = "user"
-    status: str = "active"
-    created_at: str = ""
-    updated_at: str = ""
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "plan_id": self.plan_id,
-            "agent_id": self.agent_id,
-            "verification_criteria": [c.to_dict() for c in self.verification_criteria],
-            "nol_assembly": self.nol_assembly,
-            "nol_intent_hash": self.nol_intent_hash,
-            "nol_verified": self.nol_verified,
-            "approved_at": self.approved_at,
-            "approved_by": self.approved_by,
-            "status": self.status,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
-        }
-
-
-# ── Project Management Dataclasses ──────────────────────────────────
 
 
 @dataclass
@@ -266,7 +122,6 @@ class PmIssue:
     branch: str | None = None
     acceptance_criteria: str | None = None
     notes: str | None = None
-    riva_contract_id: str | None = None
     created_at: str = ""
     updated_at: str = ""
 
@@ -285,7 +140,6 @@ class PmIssue:
             "branch": self.branch,
             "acceptance_criteria": self.acceptance_criteria,
             "notes": self.notes,
-            "riva_contract_id": self.riva_contract_id,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -306,7 +160,6 @@ class PmIssue:
             branch=row["branch"],
             acceptance_criteria=row["acceptance_criteria"],
             notes=row["notes"],
-            riva_contract_id=row["riva_contract_id"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
         )
