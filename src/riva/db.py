@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 
-from trcore.settings import settings
+from cairn.settings import settings
 
 logger = logging.getLogger(__name__)
 

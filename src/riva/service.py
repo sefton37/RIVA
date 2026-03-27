@@ -13,7 +13,7 @@ import signal
 import struct
 from pathlib import Path
 
-from trcore.settings import settings
+from cairn.settings import settings
 
 from riva.rpc_dispatcher import dispatch
 from riva.rpc_handlers.system import set_start_time
@@ -32,8 +32,6 @@ def get_socket_path() -> Path:
 async def _handle_client(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
-    *,
-    provider: object | None = None,
 ) -> None:
     """Handle a single client connection.
 
@@ -60,7 +58,7 @@ async def _handle_client(
             logger.debug("Received: %s", raw[:200])
 
             # Dispatch
-            response = dispatch(raw, provider=provider)
+            response = dispatch(raw)
 
             # Send length-prefixed response
             response_bytes = response.encode("utf-8")
@@ -80,254 +78,26 @@ async def _handle_client(
             pass
 
 
-def _register_phase2_handlers(
-    provider: object | None = None, *, structured: bool = False
-) -> None:
-    """Register Phase 2 RPC handlers (plan engine + contracts).
-
-    Args:
-        provider: LLM provider for plan decomposition.
-        structured: Use StructuredPlanner (multi-stage extraction)
-            instead of PlanEngine (single-shot JSON generation).
-    """
+def _register_project_handlers() -> None:
+    """Register project CRUD RPC handlers."""
     from riva.rpc_dispatcher import register_method
-    from riva.rpc_handlers.contracts import (
-        handle_contract_cancel,
-        handle_contract_get,
-        handle_contract_list,
-    )
-    from riva.rpc_handlers.plans import (
-        handle_plan_approve,
-        handle_plan_create,
-        handle_plan_get,
-        handle_plan_list,
-        handle_plan_status,
-        set_engine,
-    )
-
-    if structured:
-        from riva.structured_planner import StructuredPlanner
-        engine = StructuredPlanner(provider=provider)
-        logger.info("Using STRUCTURED plan pipeline (multi-stage extraction)")
-    else:
-        from riva.plan_engine import PlanEngine
-        engine = PlanEngine(provider=provider)
-        logger.info("Using FREE-FORM plan engine (single-shot JSON)")
-
-    set_engine(engine)
-
-    # Plan methods
-    register_method("riva/plan/create", handle_plan_create, guarded=True)
-    register_method("riva/plan/status", handle_plan_status)
-    register_method("riva/plan/get", handle_plan_get)
-    register_method("riva/plan/list", handle_plan_list)
-    register_method("riva/plan/approve", handle_plan_approve)
-
-    # Contract methods
-    register_method("riva/contract/get", handle_contract_get)
-    register_method("riva/contract/list", handle_contract_list)
-    register_method("riva/contract/cancel", handle_contract_cancel)
-
-    logger.info("Phase 2 handlers registered (plan engine + contracts)")
-
-
-def _register_phase3_handlers(*, simulated: bool = False) -> None:
-    """Register Phase 3 RPC handlers (agent observatory + properties).
-
-    Args:
-        simulated: Use SimCCManager instead of real CCManager.
-            Simulated mode writes expected files to workspace without
-            spawning Claude Code. Safe for testing.
-    """
-    from riva.cc_adapter import RivaCCDatabase
-    from riva.rpc_dispatcher import register_method
-    from riva.rpc_handlers.agents import (
-        handle_agents_create,
-        handle_agents_delete,
-        handle_agents_get,
-        handle_agents_list,
-        handle_properties_get,
-        handle_properties_sync,
-        handle_properties_update,
-        set_manager,
-    )
-
-    cc_db = RivaCCDatabase()
-
-    if simulated:
-        from riva.sim_cc_manager import SimCCManager
-        manager = SimCCManager(db=cc_db)
-        logger.info("Using SIMULATED CCManager (no real Claude Code)")
-    else:
-        from trcore.cc_manager import CCManager
-        manager = CCManager(db=cc_db)
-        logger.info("Using REAL CCManager (Claude Code CLI)")
-
-    set_manager(manager)
-
-    # Agent methods
-    register_method("riva/agents/list", handle_agents_list)
-    register_method("riva/agents/get", handle_agents_get)
-    register_method("riva/agents/create", handle_agents_create)
-    register_method("riva/agents/delete", handle_agents_delete)
-
-    # Properties methods
-    register_method("riva/agents/properties/get", handle_properties_get)
-    register_method("riva/agents/properties/update", handle_properties_update)
-    register_method("riva/agents/properties/sync", handle_properties_sync)
-
-    logger.info("Phase 3 handlers registered (agent observatory + properties)")
-
-    return manager  # Return manager for Phase 4
-
-
-def _register_phase4_handlers(manager) -> None:
-    """Register Phase 4 RPC handlers (deployment + live streaming)."""
-    from riva.rpc_dispatcher import register_method
-    from riva.rpc_handlers.sessions import (
-        handle_session_deploy,
-        handle_session_history,
-        handle_session_poll,
-        handle_session_stop,
-        set_broker,
-    )
-    from riva.rpc_handlers.sessions import (
-        set_manager as set_session_manager,
-    )
-    from riva.stream_broker import StreamBroker
-
-    # Share the same CCManager from Phase 3
-    set_session_manager(manager)
-
-    # Initialize stream broker
-    broker = StreamBroker(manager)
-    set_broker(broker)
-
-    # Session methods
-    register_method("riva/session/deploy", handle_session_deploy)
-    register_method("riva/session/poll", handle_session_poll)
-    register_method("riva/session/stop", handle_session_stop)
-    register_method("riva/session/history", handle_session_history)
-
-    logger.info("Phase 4 handlers registered (deployment + live streaming)")
-
-    return broker
-
-
-def _register_phase5_handlers(manager, broker) -> None:
-    """Register Phase 5 RPC handlers (audit engine + project management)."""
-    from riva.rpc_dispatcher import register_method
-    from riva.rpc_handlers.audits import (
-        handle_audit_get,
-        handle_audit_list,
-        handle_audit_trigger,
-    )
-    from riva.rpc_handlers.audits import (
-        set_manager as set_audit_manager,
-    )
     from riva.rpc_handlers.projects import (
         handle_projects_archive,
         handle_projects_create,
         handle_projects_get,
         handle_projects_list,
+        handle_projects_scan,
         handle_projects_update,
     )
 
-    set_audit_manager(manager)
-
-    # Audit methods
-    register_method("riva/audit/trigger", handle_audit_trigger)
-    register_method("riva/audit/get", handle_audit_get)
-    register_method("riva/audit/list", handle_audit_list)
-
-    # Project methods
     register_method("riva/projects/create", handle_projects_create)
     register_method("riva/projects/list", handle_projects_list)
     register_method("riva/projects/get", handle_projects_get)
     register_method("riva/projects/update", handle_projects_update)
     register_method("riva/projects/archive", handle_projects_archive)
+    register_method("riva/projects/scan", handle_projects_scan)
 
-    # Wire auto-audit on agent done event
-    def _on_agent_done(agent_id: str) -> None:
-        """Auto-trigger audit when an agent completes with an active contract."""
-        import os
-
-        from riva.contract_store import list_contracts
-
-        username = os.environ.get("USER", "unknown")
-        agents = manager.list_agents(username)
-        agent = next((a for a in agents if a["id"] == agent_id), None)
-        if agent is None:
-            return
-
-        active = list_contracts(status="active")
-        for contract in active:
-            if contract.agent_id == agent_id:
-                try:
-                    from riva.audit_engine import run_audit
-
-                    result = run_audit(
-                        contract.id, agent["cwd"], triggered_by="auto"
-                    )
-
-                    # Automation chain on passing audit
-                    if result.get("overall_verdict") == "passed":
-                        # Run full automation: PR → CI poll → close issue
-                        try:
-                            from riva.automation import on_audit_passed
-
-                            on_audit_passed(
-                                contract.id,
-                                result["audit_id"],
-                                agent["cwd"],
-                            )
-                        except Exception:
-                            logger.debug(
-                                "Automation chain skipped for %s",
-                                contract.id,
-                            )
-
-                        # Propose scene completion
-                        try:
-                            from riva.play_write import propose_scene_update
-
-                            proposal = propose_scene_update(
-                                contract.id, result["audit_id"]
-                            )
-                            if proposal:
-                                logger.info(
-                                    "Scene update proposed for contract %s: "
-                                    "%d candidate scenes",
-                                    contract.id,
-                                    len(proposal.get("scenes", [])),
-                                )
-                        except Exception:
-                            logger.debug(
-                                "Scene proposal skipped for %s",
-                                contract.id,
-                            )
-                except Exception:
-                    logger.exception(
-                        "Auto-audit failed for contract %s", contract.id
-                    )
-
-    broker.on_agent_done(_on_agent_done)
-
-    # Phase 6: register play write handler
-    from riva.rpc_dispatcher import register_method
-
-    def _handle_scene_confirm(*, scene_id: str = "", **_kw):
-        if not scene_id:
-            from riva.errors import RivaError
-
-            raise RivaError("scene_id is required")
-        from riva.play_write import confirm_scene_complete
-
-        return confirm_scene_complete(scene_id)
-
-    register_method("riva/scene/confirm", _handle_scene_confirm)
-
-    logger.info("Phase 5+6 handlers registered (audit + projects + play write)")
+    logger.info("Project handlers registered (6 methods)")
 
 
 def _register_pm_handlers() -> None:
@@ -432,10 +202,6 @@ def _register_devops_handlers() -> None:
     woodpecker = WoodpeckerClient()
     set_clients(forgejo, woodpecker)
 
-    # Share clients with automation module
-    from riva.automation import set_devops_clients
-    set_devops_clients(forgejo, woodpecker)
-
     if forgejo.configured:
         logger.info("Forgejo client configured: %s", forgejo.base_url)
     else:
@@ -472,26 +238,15 @@ def _register_devops_handlers() -> None:
 
 async def start_server(
     *,
-    provider: object | None = None,
     socket_path: Path | None = None,
     ready_event: asyncio.Event | None = None,
-    simulated: bool = False,
-    disable_guard: bool = False,
-    structured: bool = False,
 ) -> None:
     """Start the RIVA Unix socket server.
 
     Args:
-        provider: LLM provider for entry guard. None disables the guard.
         socket_path: Override socket path (for testing).
         ready_event: Set when the server is ready to accept connections.
-        simulated: Use SimCCManager (no real Claude Code). Safe for testing.
-        disable_guard: Skip entry guard entirely (for benchmarking plan quality).
-        structured: Use StructuredPlanner instead of PlanEngine.
     """
-    guard_provider = None if disable_guard else provider
-    if disable_guard:
-        logger.info("Entry guard DISABLED (benchmark mode)")
     sock_path = socket_path or get_socket_path()
     sock_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -500,21 +255,16 @@ async def start_server(
         sock_path.unlink()
 
     # Ensure schema and register handlers
-    # provider = full LLM provider (plan engine needs this)
-    # guard_provider = None if guard disabled, otherwise same as provider
     ensure_schema()
     set_start_time()
-    _register_phase2_handlers(provider, structured=structured)  # Plan engine gets real provider
-    manager = _register_phase3_handlers(simulated=simulated)
-    broker = _register_phase4_handlers(manager)
-    _register_phase5_handlers(manager, broker)
+    _register_project_handlers()
     _register_pm_handlers()
     _register_devops_handlers()
 
     async def client_handler(
         reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
-        await _handle_client(reader, writer, provider=guard_provider)  # Guard uses guard_provider
+        await _handle_client(reader, writer)
 
     server = await asyncio.start_unix_server(client_handler, path=str(sock_path))
 
@@ -543,31 +293,12 @@ def run_service() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description="RIVA service")
-    parser.add_argument(
-        "--simulated", action="store_true",
-        help="Use simulated CCManager (no real Claude Code). Safe for testing.",
-    )
-    args = parser.parse_args()
+    parser.parse_args()
 
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-
-    if args.simulated:
-        logger.info("SIMULATED MODE — no real Claude Code will be spawned")
-
-    # Try to get an LLM provider for entry guard
-    provider = None
-    try:
-        from trcore.db import get_db
-        from trcore.providers import get_provider
-
-        db = get_db()
-        provider = get_provider(db)
-        logger.info("Entry guard enabled (LLM provider available)")
-    except Exception as exc:
-        logger.warning("Entry guard disabled (no LLM provider): %s", exc)
 
     # Handle SIGTERM gracefully
     loop = asyncio.new_event_loop()
@@ -581,9 +312,7 @@ def run_service() -> None:
         loop.add_signal_handler(sig, _shutdown, sig)
 
     try:
-        loop.run_until_complete(
-            start_server(provider=provider, simulated=args.simulated)
-        )
+        loop.run_until_complete(start_server())
     except KeyboardInterrupt:
         pass
     finally:
